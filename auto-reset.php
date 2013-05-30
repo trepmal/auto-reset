@@ -35,8 +35,8 @@ define( 'DISALLOW_FILE_MODS', true );
 new Auto_Reset();
 class Auto_Reset {
 
-	var $interval = 3600; //one hour
-	var $shortcuts = true; //enable 'resetnow', 'delay', and 'onehour' URL shortcuts
+	var $interval = 3600; // in seconds. 3600 = one hour
+	var $shortcuts = true; // enable 'resetnow', 'delay', and 'onehour' URL shortcuts
 
 	//define defaults
 	var $blog_title = 'WP Testdrive';
@@ -45,7 +45,16 @@ class Auto_Reset {
 	var $public = 0;
 	var $user_password = 'demo';
 
-	//user experience
+	// auto-activate and hide from admin
+	var $plugins = array();
+	// var $plugins = array( 'debug-bar-console/debug-bar-console.php', 'debug-bar-extender/debug-bar-extender.php', 'debug-bar/debug-bar.php', 'log-deprecated-notices/log-deprecated-notices.php', 'theme-check/theme-check.php', 'plugin-check/plugin-check.php' );
+
+	var $remove_uploads_dir = true;
+	// relative to the uploads/ directory
+	var $preserve_dirs = array();
+	// var $preserve_dirs = array( 'nodelete' );
+
+	// user experience
 	var $hide_welcome_dashboard = true;
 	var $show_feature_pointers = true;
 
@@ -54,7 +63,7 @@ class Auto_Reset {
 	var $broadcast_credentials = true;
 
 	var $generate_new_users = true;
-	var $randomize_new_passwords = true;
+	var $randomize_new_passwords = true; // if false, password will be the same as the username e.g. demo1
 
 	function __construct() {
 
@@ -64,42 +73,47 @@ class Auto_Reset {
 		$resetnow = false;
 		if ( $this->shortcuts ) {
 
-			//delay the reset by the increment value
+			// delay the reset by the increment value
 			if ( isset( $_GET['delay'] ) )
 				update_option( 'next_reset', array( $next_reset + $this->interval ) );
 
-			//reset in one hour
+			// reset in one hour
 			if ( isset( $_GET['onehour'] ) )
 				update_option( 'next_reset', array( time() + ( 60 * 60 ) ) );
 
-			//reset in X hours
+			// reset in X hours
 			if ( isset( $_GET['hours'] ) )
 				update_option( 'next_reset', array( time() + ( intval( $_GET['hours'] ) * 3600 ) ) );
 
-			//reset in X minutes
+			// reset in X minutes
 			if ( isset( $_GET['minutes'] ) )
 				update_option( 'next_reset', array( time() + ( intval( $_GET['minutes'] ) * 60 ) ) );
 
-			//reset now
+			// reset now
 			$resetnow = isset( $_GET['resetnow'] );
 		}
 
 		if ( $next_reset <= time() || $resetnow )
-			//add_action('setup_theme', array( &$this, 'the_reset' ) );
 			add_action('admin_init', array( &$this, 'the_reset' ), 1 );
 
-		//prevent editing/deleting of main 'demo' user, ensure someone can always log in
+		// prevent editing/deleting of main 'demo' user, ensure someone can always log in
 		add_filter( 'map_meta_cap', array( &$this, 'prevent_edit_of_primary_user' ), 10, 4 );
 		add_filter( 'user_row_actions', array( &$this, 'no_user_edit_note' ), 10, 2 );
 
-		//generate a new user when someone logs in
+		// generate a new user when someone logs in
 		if ( $this->generate_new_users )
 			add_action( 'wp_login', array( &$this, 'generate_new_user' ), 10, 2 );
+
 		if ( $this->broadcast_credentials )
 	 		add_filter( 'login_message', array( &$this, 'show_credentials' ) );
 
 		if ( $this->show_countdown )
 	 		add_action( 'admin_bar_menu', array( &$this, 'countdown' ), 100 );
+
+		add_filter( 'all_plugins', array( &$this, 'all_plugins' ) );
+		if ( ! get_option( 'active_plugins', false ) )
+			update_option( 'active_plugins', $this->plugins );
+
 	}
 
 	function the_reset() {
@@ -109,33 +123,37 @@ class Auto_Reset {
 			exit();
 		}
 
-		$dirs = wp_upload_dir();
-		$this->remove_all_uploads( $dirs['basedir'] );
+		if ( $this->remove_uploads_dir ) {
+			$dirs = wp_upload_dir();
+			$this->basedir = trailingslashit( $dirs['basedir'] );
+			$this->preserve_dirs = array_map( array( &$this, 'prepend_upload_dirs' ), $this->preserve_dirs );
+			$this->remove_all_uploads( $this->basedir );
+		}
 
-		//get and remove all tables
+		// get and remove all tables
 		global $wpdb;
 		$tables = array_merge( $wpdb->tables, $wpdb->global_tables );
 		foreach( $tables as $tbl )
 			$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}{$tbl}" );
 
-		//make sure wp_install() is available
+		// make sure wp_install() is available
 		if ( ! function_exists( 'wp_install' ) )
 			require_once( ABSPATH . 'wp-admin/includes/upgrade.php' );
 
-		//install site with defaults
+		// install site with defaults
 		$install = wp_install( $this->blog_title, $this->user_name, $this->user_email, $this->public, '', $this->user_password );
 		if ( $this->generate_new_users )
 			update_option( 'next_user', array( 'un' => $this->user_name, 'pw' => $this->user_password ) );
 
-		//disable the welcome dashboard
+		// disable the welcome dashboard
 		if ( $this->hide_welcome_dashboard )
 		update_user_meta( $install['user_id'], 'show_welcome_panel', false );
 
-		//enable feature pointers
+		// enable feature pointers
 		if ( $this->show_feature_pointers )
 		update_user_meta( $install['user_id'], 'dismissed_wp_pointers', '' );
 
-		//schedule next reset
+		// schedule next reset
 		update_option( 'next_reset', array( time() + $this->interval ) );
 
 		/*				DO MORE!					*
@@ -144,40 +162,60 @@ class Auto_Reset {
 			or active plugins. Go wild, have fun.
 		*											*/
 
-		//send user to login screen
+		// send user to login screen
 		wp_redirect( admin_url('')  );
 		exit();
 	}
 
-	function remove_all_uploads( $dir ) {
-		$here = glob("$dir*.*" ); //get files
-		$dirs = glob("$dir*", GLOB_ONLYDIR|GLOB_MARK ); //get subdirectories
+	function all_plugins( $get_plugins ) {
 
-		//start with subs, less confusing
-		foreach ($dirs as $k => $sdir)
+		// hide these without activating
+		$this->plugins[] = 'akismet/akismet.php';
+		$this->plugins[] = 'hello.php';
+
+		foreach( $this->plugins as $b )
+			if ( isset( $get_plugins[ $b ] ) ) unset( $get_plugins[ $b ] );
+
+		return $get_plugins;
+	}
+
+	function remove_all_uploads( $dir ) {
+		$here = array_merge( glob("$dir.*"), glob("$dir*.*") ); // get files, including hidden
+		$dirs = glob("$dir*", GLOB_ONLYDIR|GLOB_MARK ); // get subdirectories
+
+		// start with subs, less confusing
+		foreach( $dirs as $k => $sdir )
 			$this->remove_all_uploads( $sdir );
 
-		//loop through files and delete
-		foreach ( $here as $file ) {
+		// loop through files and delete
+		foreach( $here as $file ) {
 			if ( is_file( $file ) )
 				unlink( $file );
 		}
-		if ( is_dir( $dir ) )
+
+		// print_r( $this->preserve_dirs );
+		// die( $dir );
+		if ( $dir == $this->basedir && count( $this->preserve_dirs ) > 0 ) {
+			// don't delete uploads/ if we preserved directories
+		} else if ( is_dir( $dir ) && ! in_array( $dir, $this->preserve_dirs ) )
 			rmdir( $dir );
 	}
+
+		function prepend_upload_dirs( $input ) {
+			return trailingslashit( $this->basedir . $input );
+		}
 
 	function prevent_edit_of_primary_user( $caps, $cap, $user_id, $args ) {
 		if ( $cap == 'edit_user' && in_array( 1, $args ) )
 			return false;
 		if ( $cap == 'delete_users' && in_array( 1, $args ) )
 			return false;
-		//during testing, I forgot to put 'return $caps' here
-		//that gave all users all privs
-		//so don't remove this, mkay?
+
 		return $caps;
 	}
+
 	function no_user_edit_note( $actions, $user ) {
-		if ($user->ID == 1)
+		if ( $user->ID == 1 )
 			$actions[] = __( 'For the purposes of this demo, this user cannot be edited.', 'auto-reset' );
 		return $actions;
 	}
@@ -186,10 +224,9 @@ class Auto_Reset {
 
 		$next = get_option( 'next_user' );
 
-		//if not logging in with the newest user, don't create another
+		// if not logging in with the newest user, don't create another
 		if ( $user_login != $next['un'] )
 			return;
-
 
 		$i = count( get_users() );
 		$un = $pw = 'demo'.$i;
@@ -210,38 +247,38 @@ class Auto_Reset {
 	}
 
 	function countdown( $wp_admin_bar ) {
-		//get next scheduled reset
+		// get next scheduled reset
 		$next = array_shift( get_option( 'next_reset' ) );
 		$now = time();
 
-		//get difference between then and now
+		// get difference between then and now
 		$diff = ( $next - $now );
 
-		//convert it to mins:secs
+		// convert it to mins:secs
 		$time = date_i18n( 'H:i:s', $diff );
 
-		//add live countdown to next reset to Toolbar
+		// add live countdown to next reset to Toolbar
 		$wp_admin_bar->add_menu( array(
 			'id' => 'live-countdown',
 			'title' => sprintf( __( 'Resetting in: %s', 'auto-reset' ), "<time id='javascript_countdown_time'>$time</time>" ) . $this->js( $diff )
 		) );
 
-		//add timestam for next reset to Toolbar
+		// add timestamp for next reset to Toolbar
 		$wp_admin_bar->add_menu( array(
 			'parent' => 'live-countdown',
 			'id' => 'live-countdown-timestamp',
 			'title' => sprintf( __( 'Reset at: %s', 'auto-reset' ), date_i18n( 'F j, Y H:i:sa T', $next ) )
 		) );
 
-		//add current time, so we don't have to figure out UTC
+		// add current time, so we don't have to figure out UTC
 		$wp_admin_bar->add_menu( array(
 			'parent' => 'live-countdown',
 			'id' => 'live-countdown-current-time',
-			'title' => sprintf( __( 'Currently: %s', 'auto-reset' ), date_i18n( 'F j, Y H:i:sa T' ) )
+			'title' => sprintf( __( 'Currently: %s', 'auto-reset' ), date_i18n( 'F j, Y H:i:sa T', $now ) )
 		) );
 	}
 
-	//this JS will probably bother you
+	// this JS will probably bother you
 	function js( $diff ) {
 		// http://stuntsnippets.com/javascript-countdown/
 		return "<script type='text/javascript'>
