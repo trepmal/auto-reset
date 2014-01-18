@@ -161,6 +161,7 @@ class Auto_Reset {
 		$defaults = array(
 			'interval'                => $this->interval,
 			'shortcuts'               => $this->shortcuts,
+			'menu_shortcuts'          => $this->shortcuts,
 			'blog_title'              => $this->blog_title,
 			'user_name'               => $this->user_name,
 			'user_email'              => $this->user_email,
@@ -269,11 +270,13 @@ class Auto_Reset {
 		// schedule next reset
 		update_option( 'next_reset', array( time() + $this->settings['interval'] ) );
 
-		/*				DO MORE!					*
+		/*                 DO MORE!                  *
 			You can do other things in here, too.
 			Maybe create some extra pages & posts
 			or active plugins. Go wild, have fun.
 		*											*/
+
+		do_action( 'on_auto_reset' );
 
 		// send user to login screen
 		wp_redirect( admin_url('')  );
@@ -378,7 +381,7 @@ class Auto_Reset {
 			'title' => sprintf( __( 'Resetting in: %s', 'auto-reset' ), "<time id='javascript_countdown_time'>$time</time>" ) . $this->js( $diff )
 		) );
 
-		if ( $this->settings['shortcuts'] ) {
+		if ( $this->settings['menu_shortcuts'] ) {
 			$wp_admin_bar->add_menu( array(
 				'parent' => 'live-countdown',
 				'id' => 'live-countdown-reset-now',
