@@ -2,11 +2,10 @@
 /*
 Plugin Name: Auto Reset
 
-// Periods just prevent this info from showing in the admin.
-P.lugin URI: http://trepmal.com/plugins/auto-reset
-D.escription: Untested on Multisite!!! Automatically reset this site at regular intervals (default: 1 hour).
-A.uthor: Kailey Lampert
-A.uthor URI: http://kaileylampert.com
+Plugin URI; http://trepmal.com/plugins/auto-reset
+Description; Untested on Multisite!!! Automatically reset this site at regular intervals (default: 1 hour).
+Author; Kailey Lampert
+Author URI; http://kaileylampert.com
 
 What this will do:
  - on given interval (default hourly) the site will be reset
@@ -32,61 +31,175 @@ Other notes:
 // files won't be reset, so make sure the user doesn't change them
 define( 'DISALLOW_FILE_MODS', true );
 
-new Auto_Reset();
+$auto_reset = new Auto_Reset();
 class Auto_Reset {
 
-	var $interval = 3600; // in seconds. 3600 = one hour
+	/**
+	 * Interval, how often to reset in seconds
+	 *
+	 * @var int
+	 */
+	var $interval = 3600;
+
+	/**
+	 * Shorcuts, enable query arg shortcuts
+	 *
+	 * @var bool
+	 */
 	var $shortcuts = true; // enable 'resetnow', 'delay', and 'onehour' URL shortcuts
 
-	//define defaults
+	/**
+	 * Blog Title
+	 *
+	 * @var string
+	 */
 	var $blog_title = 'WP Testdrive';
+
+	/**
+	 * First user's username
+	 *
+	 * @var string
+	 */
 	var $user_name = 'demo';
+
+	/**
+	 * First user's email address
+	 *
+	 * @var string
+	 */
 	var $user_email = 'nobody@example.com';
+
+	/**
+	 * Blog privacy setting
+	 *
+	 * @var bool
+	 */
 	var $public = 0;
+
+	/**
+	 * First user's password
+	 *
+	 * @var sting
+	 */
 	var $user_password = 'demo';
 
-	// auto-activate and hide from admin
+	/**
+	 * Plugins to auto-activate
+	 *
+	 * @var array
+	 */
 	var $plugins = array();
-	// var $plugins = array( 'debug-bar-console/debug-bar-console.php', 'debug-bar-extender/debug-bar-extender.php', 'debug-bar/debug-bar.php', 'log-deprecated-notices/log-deprecated-notices.php', 'theme-check/theme-check.php', 'plugin-check/plugin-check.php' );
+	// e.g. var $plugins = array( 'debug-bar-console/debug-bar-console.php', 'debug-bar-extender/debug-bar-extender.php', 'debug-bar/debug-bar.php', 'log-deprecated-notices/log-deprecated-notices.php', 'theme-check/theme-check.php', 'plugin-check/plugin-check.php' );
 
+	/**
+	 * Hide Akismet and Hello Dolly in admin
+	 *
+	 * @var bool
+	 */
+	var $hide_default_plugins = true;
+
+	/**
+	 * Remove uploaded files on reset
+	 *
+	 * @var bool
+	 */
 	var $remove_uploads_dir = true;
-	// relative to the uploads/ directory
-	var $preserve_dirs = array();
-	// var $preserve_dirs = array( 'nodelete' );
 
-	// user experience
+	/**
+	 * Directories to preserve (within the uploads dir)
+	 *
+	 * @var array
+	 */
+	var $preserve_dirs = array();
+	// e.g. var $preserve_dirs = array( 'nodelete' );
+
+	/**
+	 * Hide the Welcome panel on dashboard
+	 *
+	 * @var bool
+	 */
 	var $hide_welcome_dashboard = true;
+
+	/**
+	 * Show the feature pointers
+	 *
+	 * @var bool
+	 */
 	var $show_feature_pointers = true;
 
+	/**
+	 * Show the countdown
+	 *
+	 * @var bool
+	 */
 	var $show_countdown = true;
 
+	/**
+	 * Show the next set of login credentials on wp-login
+	 *
+	 * @var bool
+	 */
 	var $broadcast_credentials = true;
 
+	/**
+	 * Generate a new user everytime someone logs in as the last user
+	 *
+	 * @var bool
+	 */
 	var $generate_new_users = true;
-	var $randomize_new_passwords = true; // if false, password will be the same as the username e.g. demo1
 
-	function __construct() {
+	/**
+	 * Randomize new passwords for new users.
+	 * If false, password is same as the username
+	 *
+	 * @var bool
+	 */
+	var $randomize_new_passwords = true;
 
-		add_option( 'next_reset', array( time() + $this->interval ) );
+	function __construct( ) {
+
+		$defaults = array(
+			'interval'                => $this->interval,
+			'shortcuts'               => $this->shortcuts,
+			'blog_title'              => $this->blog_title,
+			'user_name'               => $this->user_name,
+			'user_email'              => $this->user_email,
+			'public'                  => $this->public,
+			'user_password'           => $this->user_password,
+			'plugins'                 => $this->plugins,
+			'hide_default_plugins'    => $this->hide_default_plugins,
+			'remove_uploads_dir'      => $this->remove_uploads_dir,
+			'preserve_dirs'           => $this->preserve_dirs,
+			'hide_welcome_dashboard'  => $this->hide_welcome_dashboard,
+			'show_feature_pointers'   => $this->show_feature_pointers,
+			'show_countdown'          => $this->show_countdown,
+			'broadcast_credentials'   => $this->broadcast_credentials,
+			'generate_new_users'      => $this->generate_new_users,
+			'randomize_new_passwords' => $this->randomize_new_passwords,
+		);
+
+		$this->settings = apply_filters( 'auto_reset', $defaults );
+
+		add_option( 'next_reset', array( time() + $this->settings['interval'] ) );
 		$next_reset = array_shift( get_option( 'next_reset' ) );
 
 		$resetnow = false;
-		if ( $this->shortcuts ) {
+		if ( $this->settings['shortcuts'] ) {
 
 			// delay the reset by the increment value
 			if ( isset( $_GET['delay'] ) )
-				update_option( 'next_reset', array( $next_reset + $this->interval ) );
+				update_option( 'next_reset', array( $next_reset + $this->settings['interval'] ) );
 
 			// reset in one hour
 			if ( isset( $_GET['onehour'] ) )
 				update_option( 'next_reset', array( time() + ( 60 * 60 ) ) );
 
 			// reset in X hours
-			if ( isset( $_GET['hours'] ) )
+			if ( isset( $_GET['hours'] ) && ! empty( $_GET['hours'] ) )
 				update_option( 'next_reset', array( time() + ( intval( $_GET['hours'] ) * 3600 ) ) );
 
 			// reset in X minutes
-			if ( isset( $_GET['minutes'] ) )
+			if ( isset( $_GET['minutes'] ) && ! empty( $_GET['minutes'] ) )
 				update_option( 'next_reset', array( time() + ( intval( $_GET['minutes'] ) * 60 ) ) );
 
 			// reset now
@@ -101,18 +214,18 @@ class Auto_Reset {
 		add_filter( 'user_row_actions', array( &$this, 'no_user_edit_note' ), 10, 2 );
 
 		// generate a new user when someone logs in
-		if ( $this->generate_new_users )
+		if ( $this->settings['generate_new_users'] )
 			add_action( 'wp_login', array( &$this, 'generate_new_user' ), 10, 2 );
 
-		if ( $this->broadcast_credentials )
+		if ( $this->settings['broadcast_credentials'] )
 	 		add_filter( 'login_message', array( &$this, 'show_credentials' ) );
 
-		if ( $this->show_countdown )
+		if ( $this->settings['show_countdown'] )
 	 		add_action( 'admin_bar_menu', array( &$this, 'countdown' ), 100 );
 
 		add_filter( 'all_plugins', array( &$this, 'all_plugins' ) );
 		if ( ! get_option( 'active_plugins', false ) )
-			update_option( 'active_plugins', $this->plugins );
+			update_option( 'active_plugins', $this->settings['plugins'] );
 
 	}
 
@@ -123,10 +236,10 @@ class Auto_Reset {
 			exit();
 		}
 
-		if ( $this->remove_uploads_dir ) {
+		if ( $this->settings['remove_uploads_dir'] ) {
 			$dirs = wp_upload_dir();
 			$this->basedir = trailingslashit( $dirs['basedir'] );
-			$this->preserve_dirs = array_map( array( &$this, 'prepend_upload_dirs' ), $this->preserve_dirs );
+			$this->settings['preserve_dirs'] = array_map( array( &$this, 'prepend_upload_dirs' ), $this->settings['preserve_dirs'] );
 			$this->remove_all_uploads( $this->basedir );
 		}
 
@@ -141,20 +254,20 @@ class Auto_Reset {
 			require_once( ABSPATH . 'wp-admin/includes/upgrade.php' );
 
 		// install site with defaults
-		$install = wp_install( $this->blog_title, $this->user_name, $this->user_email, $this->public, '', $this->user_password );
-		if ( $this->generate_new_users )
-			update_option( 'next_user', array( 'un' => $this->user_name, 'pw' => $this->user_password ) );
+		$install = wp_install( $this->settings['blog_title'], $this->settings['user_name'], $this->settings['user_email'], $this->settings['public'], '', $this->settings['user_password'] );
+		if ( $this->settings['generate_new_users'] )
+			update_option( 'next_user', array( 'un' => $this->settings['user_name'], 'pw' => $this->settings['user_password'] ) );
 
 		// disable the welcome dashboard
-		if ( $this->hide_welcome_dashboard )
+		if ( $this->settings['hide_welcome_dashboard'] )
 		update_user_meta( $install['user_id'], 'show_welcome_panel', false );
 
 		// enable feature pointers
-		if ( $this->show_feature_pointers )
+		if ( $this->settings['show_feature_pointers'] )
 		update_user_meta( $install['user_id'], 'dismissed_wp_pointers', '' );
 
 		// schedule next reset
-		update_option( 'next_reset', array( time() + $this->interval ) );
+		update_option( 'next_reset', array( time() + $this->settings['interval'] ) );
 
 		/*				DO MORE!					*
 			You can do other things in here, too.
@@ -170,10 +283,12 @@ class Auto_Reset {
 	function all_plugins( $get_plugins ) {
 
 		// hide these without activating
-		$this->plugins[] = 'akismet/akismet.php';
-		$this->plugins[] = 'hello.php';
+		if ( $this->settings['hide_default_plugins'] ) {
+			$this->settings['plugins'][] = 'akismet/akismet.php';
+			$this->settings['plugins'][] = 'hello.php';
+		}
 
-		foreach( $this->plugins as $b )
+		foreach( $this->settings['plugins'] as $b )
 			if ( isset( $get_plugins[ $b ] ) ) unset( $get_plugins[ $b ] );
 
 		return $get_plugins;
@@ -193,11 +308,11 @@ class Auto_Reset {
 				unlink( $file );
 		}
 
-		// print_r( $this->preserve_dirs );
+		// print_r( $this->settings['preserve_dirs'] );
 		// die( $dir );
-		if ( $dir == $this->basedir && count( $this->preserve_dirs ) > 0 ) {
+		if ( $dir == $this->basedir && count( $this->settings['preserve_dirs'] ) > 0 ) {
 			// don't delete uploads/ if we preserved directories
-		} else if ( is_dir( $dir ) && ! in_array( $dir, $this->preserve_dirs ) )
+		} else if ( is_dir( $dir ) && ! in_array( $dir, $this->settings['preserve_dirs'] ) )
 			rmdir( $dir );
 	}
 
@@ -231,7 +346,7 @@ class Auto_Reset {
 		$i = count( get_users() );
 		$un = $pw = 'demo'.$i;
 
-		if ( $this->randomize_new_passwords )
+		if ( $this->settings['randomize_new_passwords'] )
 			$pw = wp_generate_password( 10, false, false );
 
 		$id = wp_create_user( $un, $pw );
@@ -242,7 +357,7 @@ class Auto_Reset {
 	}
 
 	function show_credentials() {
-		extract( get_option( 'next_user', array( 'un' => $this->user_name, 'pw' => $this->user_password ) ) );
+		extract( get_option( 'next_user', array( 'un' => $this->settings['user_name'], 'pw' => $this->settings['user_password'] ) ) );
 		return '<p class="message">' . sprintf( __( 'Username: %s', 'auto-reset' ), $un ) . '<br />' . sprintf( __( 'Password: %s', 'auto-reset' ), $pw ) . '</p>';
 	}
 
@@ -254,7 +369,7 @@ class Auto_Reset {
 		// get difference between then and now
 		$diff = ( $next - $now );
 
-		// convert it to mins:secs
+		// convert it to hrs:mins:secs
 		$time = date_i18n( 'H:i:s', $diff );
 
 		// add live countdown to next reset to Toolbar
@@ -263,18 +378,33 @@ class Auto_Reset {
 			'title' => sprintf( __( 'Resetting in: %s', 'auto-reset' ), "<time id='javascript_countdown_time'>$time</time>" ) . $this->js( $diff )
 		) );
 
+		if ( $this->settings['shortcuts'] ) {
+			$wp_admin_bar->add_menu( array(
+				'parent' => 'live-countdown',
+				'id' => 'live-countdown-reset-now',
+				'title' => __( 'Reset now', 'auto-reset' ),
+				'href' => admin_url('?resetnow')
+			) );
+			$wp_admin_bar->add_menu( array(
+				'parent' => 'live-countdown',
+				'id' => 'live-countdown-onehour',
+				'title' => __( 'Reset in one hour', 'auto-reset' ),
+				'href' => admin_url('?onehour')
+			) );
+		}
+
 		// add timestamp for next reset to Toolbar
 		$wp_admin_bar->add_menu( array(
 			'parent' => 'live-countdown',
 			'id' => 'live-countdown-timestamp',
-			'title' => sprintf( __( 'Reset at: %s', 'auto-reset' ), date_i18n( 'F j, Y H:i:sa T', $next ) )
+			'title' => sprintf( __( 'Next reset: %s', 'auto-reset' ), date_i18n( 'F j, Y H:i:s T', $next ) )
 		) );
 
 		// add current time, so we don't have to figure out UTC
 		$wp_admin_bar->add_menu( array(
 			'parent' => 'live-countdown',
 			'id' => 'live-countdown-current-time',
-			'title' => sprintf( __( 'Currently: %s', 'auto-reset' ), date_i18n( 'F j, Y H:i:sa T', $now ) )
+			'title' => sprintf( __( 'Currently: %s', 'auto-reset' ), date_i18n( 'F j, Y H:i:s T', $now ) )
 		) );
 	}
 
