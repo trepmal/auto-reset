@@ -370,7 +370,7 @@ class Auto_Reset {
 		$now = time();
 
 		// get difference between then and now
-		$diff = ( $next - $now );
+		$this->diff = $diff = ( $next - $now );
 
 		// convert it to hrs:mins:secs
 		$time = date_i18n( 'H:i:s', $diff );
@@ -378,8 +378,9 @@ class Auto_Reset {
 		// add live countdown to next reset to Toolbar
 		$wp_admin_bar->add_menu( array(
 			'id' => 'live-countdown',
-			'title' => sprintf( __( 'Resetting in: %s', 'auto-reset' ), "<time id='javascript_countdown_time'>$time</time>" ) . $this->js( $diff )
+			'title' => sprintf( __( 'Resetting in: %s', 'auto-reset' ), "<time id='javascript_countdown_time'>$time</time>" ) // . $this->js( $diff )
 		) );
+		add_action( 'admin_print_footer_scripts', array( &$this, 'admin_print_footer_scripts' ) );
 
 		if ( $this->settings['menu_shortcuts'] ) {
 			$wp_admin_bar->add_menu( array(
@@ -411,6 +412,9 @@ class Auto_Reset {
 		) );
 	}
 
+	function admin_print_footer_scripts() {
+		echo $this->js( $this->diff );
+	}
 	// this JS will probably bother you
 	function js( $diff ) {
 		// http://stuntsnippets.com/javascript-countdown/
@@ -488,7 +492,12 @@ var javascript_countdown = function () {
 }();
 
 //time to countdown in seconds, and element ID
-javascript_countdown.init($diff, 'javascript_countdown_time');</script>";
+javascript_countdown.init($diff, 'javascript_countdown_time');
+
+jQuery('#wp-admin-bar-live-countdown-reset-now a').click( function( ev ) {
+	if ( ! confirm( 'Reset this installation to defaults?') ) return false;// window.top.location( $(this).attr('href') );
+});
+</script>";
 	}
 }
 
