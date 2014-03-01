@@ -182,7 +182,8 @@ class Auto_Reset {
 		$this->settings = apply_filters( 'auto_reset', $defaults );
 
 		add_option( 'next_reset', array( time() + $this->settings['interval'] ) );
-		$next_reset = array_shift( get_option( 'next_reset' ) );
+		$_next_reset = get_option( 'next_reset' );
+		$next_reset = array_shift( $_next_reset );
 
 		$resetnow = false;
 		if ( $this->settings['shortcuts'] ) {
@@ -221,8 +222,18 @@ class Auto_Reset {
 		if ( $this->settings['broadcast_credentials'] )
 	 		add_filter( 'login_message', array( &$this, 'show_credentials' ) );
 
-		if ( $this->settings['show_countdown'] )
-	 		add_action( 'admin_bar_menu', array( &$this, 'countdown' ), 100 );
+		if ( $this->settings['show_countdown'] ) {
+
+			// get next scheduled reset
+			$this->next = $next_reset;
+			$this->now = time();
+
+			// get difference between then and now
+			$this->diff = $diff = ( $this->next - $this->now );
+
+	 		add_action( 'admin_bar_menu', array( &$this, 'countdown' ), 88 );
+			add_action( 'wp_after_admin_bar_render', array( &$this, 'admin_print_footer_scripts' ) );
+		}
 
 		add_filter( 'all_plugins', array( &$this, 'all_plugins' ) );
 		if ( ! get_option( 'active_plugins', false ) )
@@ -365,22 +376,16 @@ class Auto_Reset {
 	}
 
 	function countdown( $wp_admin_bar ) {
-		// get next scheduled reset
-		$next = array_shift( get_option( 'next_reset' ) );
-		$now = time();
-
-		// get difference between then and now
-		$this->diff = $diff = ( $next - $now );
 
 		// convert it to hrs:mins:secs
-		$time = date_i18n( 'H:i:s', $diff );
+		$time = date_i18n( 'H:i:s', $this->diff );
+
 
 		// add live countdown to next reset to Toolbar
 		$wp_admin_bar->add_menu( array(
 			'id' => 'live-countdown',
 			'title' => sprintf( __( 'Resetting in: %s', 'auto-reset' ), "<time id='javascript_countdown_time'>$time</time>" ) // . $this->js( $diff )
 		) );
-		add_action( 'admin_print_footer_scripts', array( &$this, 'admin_print_footer_scripts' ) );
 
 		if ( $this->settings['menu_shortcuts'] ) {
 			$wp_admin_bar->add_menu( array(
@@ -401,20 +406,21 @@ class Auto_Reset {
 		$wp_admin_bar->add_menu( array(
 			'parent' => 'live-countdown',
 			'id' => 'live-countdown-timestamp',
-			'title' => sprintf( __( 'Next reset: %s', 'auto-reset' ), date_i18n( 'F j, Y H:i:s T', $next ) )
+			'title' => sprintf( __( 'Next reset: %s', 'auto-reset' ), date_i18n( 'F j, Y H:i:s T', $this->next ) )
 		) );
 
 		// add current time, so we don't have to figure out UTC
 		$wp_admin_bar->add_menu( array(
 			'parent' => 'live-countdown',
 			'id' => 'live-countdown-current-time',
-			'title' => sprintf( __( 'Currently: %s', 'auto-reset' ), date_i18n( 'F j, Y H:i:s T', $now ) )
+			'title' => sprintf( __( 'Currently: %s', 'auto-reset' ), date_i18n( 'F j, Y H:i:s T', $this->now ) )
 		) );
 	}
 
 	function admin_print_footer_scripts() {
 		echo $this->js( $this->diff );
 	}
+
 	// this JS will probably bother you
 	function js( $diff ) {
 		// http://stuntsnippets.com/javascript-countdown/
